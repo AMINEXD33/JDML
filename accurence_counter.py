@@ -30,7 +30,7 @@ def check_concurency(threads_number):
         print("[+] the number of threads matches the number of updates to the key pair")
     else:
         print(
-            "[-] the number of threads dosn't match the number of updates to the key pair"
+            "[-] the number of threads doesn't match the number of updates to the key pair"
         )
 
 

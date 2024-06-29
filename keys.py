@@ -8,17 +8,8 @@ from jwcrypto.common import json_encode, json_decode
 import time
 
 
-class NotAredisObject(ValueError):
-    """
-    raised when the passed object is not a redis connection
-    """
-
-    def __init__(self):
-        super().__init__("the passed object is not a redis connection object")
-
-
 class Keys:
-    # the value that will be set in redis
+    # the name of the keys used for private/public keys
     __PUB_KEY_REFERENCE = "public_key"
     __PRI_KEY_REFERENCE = "private_key"
 
@@ -28,10 +19,11 @@ class Keys:
         self.redis_instance = redis_instance
         self.lock_key = "xhso24lf//afgs"
 
-    def to_jsondef(self):
+    def to_json(self):
         """
+        (not used in the logic, still works, though)
         serialize the key pair into json
-        return : dict {json, json}
+        Return : dict {json, json}
         """
         if self.private_key is not None and self.public_key is not None:
             return json.dumps(
@@ -43,9 +35,10 @@ class Keys:
 
     def generate_new_pairs(self, rsa_key_size=2048):
         """
-        a function that generates a key pair using
-        RSA
-        @Return: dict {JWK_object, JWK_object}
+        a function that generates a key pair using RSA
+        Params:
+            rsa_key_size -> the size of the rsa key
+        Return: dict {JWK_object, JWK_object}
         """
         private_key = jwk.JWK.generate(kty="RSA", size=2048)
         public_key = jwk.JWK()
@@ -54,27 +47,32 @@ class Keys:
 
     def acquire_lock(self, timeout=100, retry=0.05):
         """
-        this function acquires a lock for a transaction in redis
+        this function acquires a lock for the setting the keys
+        transaction in redis to avoid conflicts
+        Params:
+            timeout -> quite trying to get lock after X secs
+            retry -> try to get the lock every X secs
         """
         while not self.redis_instance.set(self.lock_key, "locked", nx=True, ex=timeout):
             time.sleep(retry)  # Retry every 50ms
 
     def release_lock(self):
         """
-        this function releases the lock in redis
+        this function releases the key lock in redis
         """
         self.redis_instance.delete(self.lock_key)
 
     def set_pair_into_redis(self, public_key: jwk.JWK, private_key: jwk.JWK):
         """
         transforms the keys into json ,and update the redis db, ofc
-        using a simple loc to prevent any Race condition
-        @public_key: the public key JWK obj
-        @private_key: the private key JWK obj
+        using the keys lock to prevent any Race condition
+        Params:
+            public_key -> the public key JWK obj
+            private_key -> the private key JWK obj
         """
         public_key_exported = public_key.export_public()
         private_key_exported = private_key.export()
-        # try and update the two keys in one transaction
+        # Try and update the two keys in one transaction.
         with self.redis_instance.pipeline() as pip:
             try:
                 self.acquire_lock()
@@ -85,15 +83,16 @@ class Keys:
                 self.redis_instance.set(Keys.__PUB_KEY_REFERENCE, public_key_exported)
                 # execute the transaction
                 pip.execute()
-                # print("redis are updated !")
             except redis.exceptions.RedisError as e:
-                print(f"error while updating keys: {e}")
+                raise RuntimeError(f"error while updating keys: {e}")
             finally:
                 self.release_lock()
 
     def remove_pair(self):
         """
         removes the key pair from redis db using a transaction
+        note:
+            not really used.
         """
         with self.redis_instance.pipeline() as pip:
             try:
@@ -120,15 +119,17 @@ class Keys:
             pri_fromdb = json.loads(pri_fromdb)
             pub_fromdb = json.loads(pub_fromdb)
             return {"private_key": pri_fromdb, "public_key": pub_fromdb}
+        # this is staying here for a while
+        # i'll remove it when everything is
+        # stable
         print("didn't expect None! line 101, keys.py")
         return None
 
     def from_json(self, private_key, public_key):
         """
         from a json load the key pair into the instance
-        @Return: JWK <object>
+        @Return: JWK(object)
         """
         # load both keys
         self.private_key = jwk.JWK(**private_key)
         self.public_key = jwk.JWK(**public_key)
-        # print("pair loaded from json !")

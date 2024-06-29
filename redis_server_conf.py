@@ -3,9 +3,10 @@ import redis
 
 class custom_redis:
     """
-    just a class to connect to the redis server
+    just a class to connect to redis server
     """
 
+    # you can change the host and port as needed
     __HOST = "localhost"
     __PORT = "6379"
 
